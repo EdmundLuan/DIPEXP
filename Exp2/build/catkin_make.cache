@@ -1,0 +1,2 @@
+filter
+-DCATKIN_DEVEL_PREFIX=/home/edmund/run/DIPEXP/Exp2/devel -DCMAKE_INSTALL_PREFIX=/home/edmund/run/DIPEXP/Exp2/install -G Unix Makefiles

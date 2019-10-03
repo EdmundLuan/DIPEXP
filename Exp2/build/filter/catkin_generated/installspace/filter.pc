@@ -1,0 +1,8 @@
+prefix=/home/edmund/run/DIPEXP/Exp2/install
+
+Name: filter
+Description: Description of filter
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/edmund/run/DIPEXP/Exp2/install/lib 
+Requires: 

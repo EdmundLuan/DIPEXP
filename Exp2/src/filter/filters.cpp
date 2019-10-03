@@ -20,10 +20,6 @@ const double pi = 3.141592654f;
 
 // 空域高斯函数
 inline Mat GssMsk(int size, int sigma){
-	if(size<0 || size%2){
-		printf("Invalid size of Gaussian mask!\nProcessing abort!\n\n");
-		return 0;
-	}
 	Mat ret(size, size, CV_64F);
 	size >>= 1;
 	sigma *= sigma;
@@ -31,7 +27,7 @@ inline Mat GssMsk(int size, int sigma){
 	for(int i=0;i<ret.rows; i++)
 		for(int j=0; j<ret.cols; j++){
 			// G(x,y)=\dfrac{1}{2\pi \sigma^2} e^{-\frac{x^2+y^2}{2\sigma^2}}
-			double d2 = (x-size)*(x-size)+(y-size)*(y-size);
+			double d2 = (i-size)*(i-size)+(j-size)*(j-size);
 			ret.at<double>(i,j) = 1.0/(2*pi*sigma)*pow(e, -d2/sigma/2);
 			sum += ret.at<double>(i, j);
 		}
@@ -44,27 +40,36 @@ inline Mat GssMsk(int size, int sigma){
 }
 
 // 空域高斯滤波器
-void Gaussian(Mat input, Mat output, double sigma, int mskSize){
-	output = input.clone();
-	if(size<0 || size%2){
+void Gaussian(Mat input, Mat &output, double sigma, int mskSize){
+	output = input;
+	if(mskSize<0 || mskSize%2==0){
 		 printf("Invalid size of Gaussian mask!\nProcessing abort!\n\n");
 		 return;
 	}
 	Mat msk = GssMsk(mskSize, sigma);
+//	for(int i=0; i<mskSize; i++){
+//		for(int j=0;j<mskSize; j++)
+//		printf("msk[%d,%d]: %lf ", i,j,msk.at<double>(i,j));
+//		putchar(10);
+//	}	
 	mskSize >>= 1;
 	// Convolution
 	for(int i=0; i<input.rows; i++)
 		for(int j=0;j<input.cols; j++){
 			double res = 0;
-			for(int s=i-mskSize; s<=i+mskSize; s++)
+			for(int s=i-mskSize; s<=i+mskSize; s++){
+				if(s<0 || s>=input.rows) continue;
 				for(int t=j-mskSize; t<=j+mskSize; t++){
 					// Oversize, tapped to ZERO. 
-					if(s<0 || s>input.rows || t<0 || t>input.cols)
-						continue;
+					if(t<0 || t>=input.cols) continue;
 					res += msk.at<double>(s-i+mskSize, t-j+mskSize)*input.at<uchar>(s,t);
 				}
+			}
+//			printf("%d ",input.at<uchar>(i,j));
 			output.at<uchar>(i,j) = (uchar)(res+0.5);
+//			printf("%lf %d\n", res, output.at<uchar>(i,j));
 		}
+		
 	return;
 }
 
@@ -73,15 +78,15 @@ void fastFuriorTransform(Mat image) {
 }
 
 // 理想低通滤波器函数
-Mat ideal_lbrf_kernel(Mat scr,float sigma)
-	return scr;
+Mat ideal_lbrf_kernel(Mat scr,float sigma){
+	//return scr.clone();
 }
 
 // 频率域滤波函数
 // src:原图像
 // blur:滤波器函数
 Mat freqfilt(Mat scr,Mat blur){
-	return scr;
+	//return scr.clone();
 }
 
 //////////////////////形态学//////////////////
@@ -121,16 +126,19 @@ int main(int argc, char **argv){
 		}
 // Mat frIn = frame();//使用笔记本摄像头
 		Mat frIn = frame(cv::Rect(0, 0, frame.cols / 2, frame.rows));//截取 zed 的左目图片
+		imshow("Original",frIn);
+		cvtColor(frIn, frIn, CV_BGR2GRAY);
+		imshow("Convert to Gray", frIn);
 // 空域滤波函数
-		Mat dst;
-		Gaussian(frIn, dst, 1, 3);
+		Mat dst(frIn.rows, frIn.cols, CV_8U);
+		Gaussian(frIn, dst, 2, 9);
+		imshow("Spatial Gaussian", dst);
 // 频域滤波函数
 //		freqfilt();
 // 膨胀函数
 //		Dilate();
 // 腐蚀函数
 //		Erode();
-		imshow("1",frIn);
 		ros::spinOnce();
 		waitKey(5);
 	}
