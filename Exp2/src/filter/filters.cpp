@@ -95,7 +95,7 @@ Mat freqfilt(Mat scr, Mat blur) {
 
 // 膨胀函数
 void Dilate(Mat src, const Mat &tem, Mat &dst) {
-    // The origin of template is always (tem.rows/2+1, tem.cols/2+1)
+    // The origin of template is always (tem.rows/2, tem.cols/2)
     dst = src.clone();
     for (int i = 0; i < src.rows; i++)
         for (int j = 0; j < src.cols; j++) {
@@ -116,7 +116,24 @@ void Dilate(Mat src, const Mat &tem, Mat &dst) {
 }
 
 // 腐蚀函数
-void Erode(Mat Src, Mat Tem, Mat Dst) {
+void Erode(Mat src, const Mat &tem, Mat &dst) {
+    dst = src.clone();
+    for (int i = 0; i < src.rows; i++)
+        for (int j = 0; j < src.cols; j++) {
+            int fit = 1;
+            for (int s = i - tem.rows / 2; s - i + tem.rows / 2 < tem.rows && fit; s++) {
+                if (s < 0 || s >= src.rows) continue;
+                for (int t = j - tem.cols / 2; t - j + tem.cols / 2 < tem.cols && fit; t++) {
+                    if (t < 0 || t >= src.cols) continue;
+                    const uchar& temEle = tem.at<uchar>(s - i + tem.rows / 2, t - j + tem.cols / 2);
+                    if(temEle > 1) continue;	// "Don't care"s
+                    fit &= temEle & src.at<uchar>(s, t);
+//                    printf("[%d, %d] %d", i,j,hit);
+                }
+            }
+            dst.at<uchar>(i, j) = fit ? 255 : 0;
+        }
+    return;
 }
 
 
@@ -162,10 +179,11 @@ int main(int argc, char **argv) {
         binaryzation(frIn, frIn);
         imshow("Binarized",  frIn);
 // 膨胀函数
-        Dilate(frIn, SE, dst);
-        imshow("Dilated", dst);
+//        Dilate(frIn, SE, dst);
+//        imshow("Dilated", dst);
 // 腐蚀函数
-//      Erode();
+        Erode(frIn, SE, dst);
+        imshow("Eroded", dst);
         ros::spinOnce();
         waitKey(5);
     }
