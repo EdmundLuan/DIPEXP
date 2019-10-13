@@ -20,7 +20,7 @@ const double pi = 3.141592654f;
 
 //////////////////////滤波//////////////////
 
-// 空域高斯函数
+// 空域高斯掩模
 inline Mat GssMsk(int size, int sigma) {
     Mat ret(size, size, CV_64F);
     size >>= 1;
@@ -91,7 +91,7 @@ void fFt(Mat input, Mat &output) {
 //
 }
 
-inline void prtSpec(Mat cmplxImg){
+inline void prtSpec(Mat cmplxImg) {
 // Magnitude
     std::vector<Mat> channels;
     Mat mag;
@@ -101,42 +101,78 @@ inline void prtSpec(Mat cmplxImg){
     log(mag, mag);
 // Normalize(0, 255)
     normalize(mag, mag, 0, 255, NORM_MINMAX);
-	Mat spec;
-	mag.convertTo(spec, CV_8U);
-	imshow("Spectrum", spec);
+    Mat spec;
+    mag.convertTo(spec, CV_8U);
+    imshow("Spectrum", spec);
 }
 
-void dFt(const Mat input, Mat &output) {
-// Pad
-    int originalR = input.rows;
-    int originalC = input.cols;
-    int paddedR = 1, paddedC = 1;
-    for(; paddedR < originalR; paddedR <<= 1);
-    for(; paddedC < originalC; paddedC <<= 1);
-    Mat re(paddedR, paddedC, CV_32F, Scalar(0));
-    copyMakeBorder(input, re, 0, paddedR - originalR, 0, paddedC - originalC, BORDER_CONSTANT, Scalar(0));
-   // IMPORTANT! Don't f**king know why, but would incur ERRORS without it.
-	re = Mat_<float>(re);
-// *(-1)^(x+y)
-    centralize<float>(re);
-// FFT
-    Mat out;	// Complex Image
-    merge(std::vector<Mat>({Mat_<float>(re), Mat::zeros(re.size(), CV_32F)}), out);
-    dft(out, out);
-  	prtSpec(out); 
-	out.copyTo(output);
+void dFt(Mat input, Mat &output, int flag = 1) {
+    if(flag >= 0)
+        dft(input, input);
+    else
+        dft(input, input, DFT_INVERSE);
+    input.copyTo(output);
     return;
 }
 
 // 理想低通滤波器函数
-Mat ideal_lbrf_kernel(Mat scr, float sigma) {
-    //return scr.clone();
+Mat ideal_lbrf_kernel(Mat src, float sigma) {
+    Mat msk(src.rows, src.cols, CV_8U, Scalar(0));
+    int cx = src.rows / 2, cy = src.cols / 2;
+    sigma *= sigma;
+    for(int i = 0; i < src.rows; i++)
+        for(int j = 0; j < src.cols; j++) {
+            if((i - cx) * (i - cx) + (j - cy) * (j - cy)  < sigma)
+                msk.at<uchar>(i, j) = 1;
+        }
+    return msk;
 }
 
 // 频率域滤波函数
 // src:原图像
 // blur:滤波器函数
-Mat freqfilt(Mat scr, Mat blur) {
+Mat freqFilt(Mat src) {
+// Pad
+    int originalR = src.rows;
+    int originalC = src.cols;
+    int paddedR = 1, paddedC = 1;
+    for(; paddedR < originalR; paddedR <<= 1);
+    for(; paddedC < originalC; paddedC <<= 1);
+    Mat re(paddedR, paddedC, CV_32F, Scalar(0));
+    copyMakeBorder(src, re, 0, paddedR - originalR, 0, paddedC - originalC, BORDER_CONSTANT, Scalar(0));
+    // IMPORTANT! Don't f**king know why, but would incur ERRORS without it.
+    re = Mat_<float>(re);
+
+    Mat blur =  ideal_lbrf_kernel(re, 50);
+    //imshow("filt", Mat_<float>(blur));
+
+// *(-1)^(x+y)
+    centralize<float>(re);
+// Filter
+    Mat cmplxImg;	// Complex Image
+    merge(std::vector<Mat>({Mat_<float>(re), Mat::zeros(re.size(), CV_32F)}), cmplxImg);
+
+    dFt(cmplxImg, cmplxImg);
+    //prtSpec(cmplxImg);
+
+    for(int i = 0; i < cmplxImg.rows; i++)
+        for(int j = 0; j < cmplxImg.cols; j++) {
+            cmplxImg.at<Vec2f>(i, j)[0] *= blur.at<uchar>(i, j);
+            cmplxImg.at<Vec2f>(i, j)[1] *= blur.at<uchar>(i, j);
+        }
+    prtSpec(cmplxImg);
+
+    dFt(cmplxImg, cmplxImg, -1);
+    std::vector<Mat> parts;
+    split(cmplxImg, parts);
+    parts[0] = Mat_<float>(parts[0]);
+    centralize<float>(parts[0]);
+    normalize(parts[0], parts[0], 0, 255, NORM_MINMAX);
+    Mat back;
+    parts[0].convertTo(back, CV_8U);
+    back = back(Rect(0, 0, originalC, originalR));
+
+    return back;
 }
 
 //////////////////////形态学//////////////////
@@ -219,23 +255,22 @@ int main(int argc, char **argv) {
         imshow("Convert to Gray", frIn);
 // 空域滤波函数
         Mat dst(frIn.rows, frIn.cols, CV_8U);
-//        Gaussian(frIn, dst, 2, 9);
-//        imshow("Spatial Gaussian", dst);
+        Gaussian(frIn, dst, 2, 9);
+        imshow("Spatial Gaussian", dst);
 // 频域滤波函数
-//      freqfilt();
+        dst = freqFilt(frIn);
+        imshow("LPF", dst);
 // 二值化
-//        binaryzation(frIn, frIn);
-//        imshow("Binarized",  frIn);
+        binaryzation(frIn, frIn);
+        imshow("Binarized",  frIn);
 // 膨胀函数
-//        Dilate(frIn, SE, dst);
-//        imshow("Dilated", dst);
+        Dilate(frIn, SE, dst);
+        imshow("Dilated", dst);
 // 腐蚀函数
-//        Erode(frIn, SE, dst);
-//        imshow("Eroded", dst);
-        dFt(frIn, dst);
-        
-		
-		ros::spinOnce();
+        Erode(frIn, SE, dst);
+        imshow("Eroded", dst);
+
+        ros::spinOnce();
         waitKey(5);
     }
     return 0;

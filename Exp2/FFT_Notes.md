@@ -47,14 +47,12 @@ $$
     \end{equation}
     $$
     
-
 -   According to lemma 2, it can be turned into:  
     $$
     y_u = \sum_{m=0}^{n/2-1}a_{2m}\omega_{n/2}^{mu}+\omega_n^u \sum_{m=0}^{n/2-1}a_{2m+1}\omega_{n/2}^{mu}\\
     {\rm where}\ u=0,1,\cdots,n/2-1
     $$
     
-
 -   By then, the original problem has been divided into two subproblems with only half size. The two summation terms are of the same form as equation (4).  
 
 -   As for the other half part of $y_u$ — where $u=n/2,n/2+1,\cdots,n$ , we can produce it in the following way:  
@@ -71,6 +69,7 @@ $$
     $$
     
 
+
 ## Description of Recursive FFT Algorithm
 
 ```c++
@@ -80,7 +79,7 @@ std::vector<complex> FFT(std::vector<double> a){
     n = a.length();	// Need to ensure that n is a power of 2 before using this function.
     if(n==1)
         return a;
-    wn=power(e, 2*PI*j/n);		// Omega_n
+    wn=power(e, -2*PI*j/n);		// Omega_n
     w=1;
     for(int i=0;i<n/2;++i){
         aOdd[i] = a[2*i+1];		// Odd-indexed coefficients
