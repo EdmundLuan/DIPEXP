@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include <vector>
 #include <cv.h>
 #include <highgui.h>
 #include <opencv2/opencv.hpp>
@@ -32,7 +33,7 @@ inline Mat GssMsk(int size, int sigma) {
             ret.at<double>(i, j) = 1.0 / (2 * pi * sigma) * pow(e, -d2 / sigma / 2);
             sum += ret.at<double>(i, j);
         }
-    // Equalize
+    // Normalize
     for (int i = 0; i < ret.rows; i++)
         for (int j = 0; j < ret.cols; j++) {
             ret.at<double>(i, j) = ret.at<double>(i, j) / sum;
@@ -76,8 +77,55 @@ void binaryzation(Mat input, Mat&output) {
         }
 }
 
+template<typename T>
+inline void centralize(Mat &mtrx) {
+    for(int i = 0; i < mtrx.rows; i++)
+        for(int j = 0; j < mtrx.cols; j++) {
+            if((i ^ j) & 1)
+                mtrx.at<T>(i, j) *= -1;
+        }
+}
+
 // 快速傅里叶变换
-void fastFuriorTransform(Mat image) {
+void fFt(Mat input, Mat &output) {
+//
+}
+
+inline void prtSpec(Mat cmplxImg){
+// Magnitude
+    std::vector<Mat> channels;
+    Mat mag;
+    split(cmplxImg, channels);
+    magnitude(channels[0], channels[1], mag);
+    mag += Scalar::all(1);
+    log(mag, mag);
+// Normalize(0, 255)
+    normalize(mag, mag, 0, 255, NORM_MINMAX);
+	Mat spec;
+	mag.convertTo(spec, CV_8U);
+	imshow("Spectrum", spec);
+}
+
+void dFt(const Mat input, Mat &output) {
+// Pad
+    int originalR = input.rows;
+    int originalC = input.cols;
+    int paddedR = 1, paddedC = 1;
+    for(; paddedR < originalR; paddedR <<= 1);
+    for(; paddedC < originalC; paddedC <<= 1);
+    Mat re(paddedR, paddedC, CV_32F, Scalar(0));
+    copyMakeBorder(input, re, 0, paddedR - originalR, 0, paddedC - originalC, BORDER_CONSTANT, Scalar(0));
+   // IMPORTANT! Don't f**king know why, but would incur ERRORS without it.
+	re = Mat_<float>(re);
+// *(-1)^(x+y)
+    centralize<float>(re);
+// FFT
+    Mat out;	// Complex Image
+    merge(std::vector<Mat>({Mat_<float>(re), Mat::zeros(re.size(), CV_32F)}), out);
+    dft(out, out);
+  	prtSpec(out); 
+	out.copyTo(output);
+    return;
 }
 
 // 理想低通滤波器函数
@@ -175,16 +223,19 @@ int main(int argc, char **argv) {
 //        imshow("Spatial Gaussian", dst);
 // 频域滤波函数
 //      freqfilt();
-// 将图像二值化
-        binaryzation(frIn, frIn);
-        imshow("Binarized",  frIn);
+// 二值化
+//        binaryzation(frIn, frIn);
+//        imshow("Binarized",  frIn);
 // 膨胀函数
 //        Dilate(frIn, SE, dst);
 //        imshow("Dilated", dst);
 // 腐蚀函数
-        Erode(frIn, SE, dst);
-        imshow("Eroded", dst);
-        ros::spinOnce();
+//        Erode(frIn, SE, dst);
+//        imshow("Eroded", dst);
+        dFt(frIn, dst);
+        
+		
+		ros::spinOnce();
         waitKey(5);
     }
     return 0;

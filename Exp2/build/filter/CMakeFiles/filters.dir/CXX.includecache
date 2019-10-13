@@ -13,6 +13,8 @@ cstdlib
 -
 cmath
 -
+vector
+-
 cv.h
 -
 highgui.h
