@@ -13,6 +13,12 @@ cstdlib
 -
 cmath
 -
+cstring
+-
+complex
+-
+vector
+-
 cv.h
 -
 highgui.h
