@@ -1,6 +1,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include <cstring>
+#include <complex>
 #include <vector>
 #include <cv.h>
 #include <highgui.h>
@@ -13,10 +15,14 @@
 #include<geometry_msgs/Twist.h>
 #include "sensor_msgs/Image.h"
 #define LINEAR_X 0
+
 using namespace cv;
+
+typedef std::vector<std::complex<double> > vcd;
 
 const double e = 2.718281828f;
 const double pi = 3.141592654f;
+
 
 //////////////////////滤波//////////////////
 
@@ -86,11 +92,57 @@ inline void centralize(Mat &mtrx) {
         }
 }
 
-// 快速傅里叶变换
-void fFt(Mat input, Mat &output) {
-//
+// My FFT in 1 dimension  
+void fFt1dim(std::complex<double>*TD, vcd& FD, int r, int flag=1) {
+//r为log2N，即迭代次数
+// flag是标识符，为负数时执行逆变换
+    int	count;				
+    int		i, j, k;				 
+    int		bfsize, p;
+    double	angle;				//Omega 
+    std::complex<double> *W, *X1, *X2, *X;
+    count = 1 << r;			
+ 
+    W  = new std::complex<double>[count / 2];
+    X1 = new std::complex<double>[count];
+    X2 = new std::complex<double>[count];
+    // 计算加权系数
+    for(i = 0; i < count / 2; i++) {
+        angle = (flag > 0 ? -1 : 1) * 2 * pi * (i / count);
+        W[i] = std::complex<double> (cos(angle), sin(angle));
+    }
+    // 将时域点写入X1
+    memcpy(X1, TD, sizeof(std::complex<double>) * count);
+
+    for(k = 0; k < r; k++) {		//k为蝶形运算的级数
+        for(j = 0; j < 1 << k; j++) {
+            bfsize = 1 << (r - k); //做蝶形运算两点间距离
+            for(i = 0; i < bfsize / 2; i++) {
+                p = j * bfsize;
+                X2[i + p] = X1[i + p] + X1[i + p + bfsize / 2];
+                X2[i + p + bfsize / 2] = (X1[i + p] - X1[i + p + bfsize / 2]) * W[i * (1 << k)];
+            }
+        }
+        X  = X1;
+        X1 = X2;
+        X2 = X;
+    }
+    // 重新排序
+    for(j = 0; j < count; j++) {
+        p = 0;
+        for(i = 0; i < r; i++) {
+            if (j & (1 << i)) {
+                p += 1 << (r - i - 1);
+            }
+        }
+        FD[j] = X1[p];
+    }
+    delete W;
+    delete X1;
+    delete X2;
 }
 
+// Show Spectrum of Frequency domain 
 inline void prtSpec(Mat cmplxImg) {
 // Magnitude
     std::vector<Mat> channels;
@@ -106,12 +158,64 @@ inline void prtSpec(Mat cmplxImg) {
     imshow("Spectrum", spec);
 }
 
+// My 2-dimensional FFT with O(n^2 log n) efficiency, but relatively slower due to larger constant. 
+void FFT(Mat input, Mat &output, int flag = 1) {
+    int r = 0, k = 1, size = MAX(input.rows, input.cols);
+    std::complex<double> *TD;
+    TD = new std::complex<double>[input.rows];
+    vcd zero(size, 0);
+    std::vector<vcd> out(size, zero);
+
+    for(; k < input.rows; (k <<= 1), r++);
+    input.copyTo(output);
+	// Transform by rows
+    for(int u = 0; u < output.rows; u++)	{
+        for(int v = 0; v < output.cols; v++) {
+            TD[v] = output.at<Vec2f>(u, v)[0];
+        }
+        fFt1dim(TD, out[u], r, flag);
+    }
+    // Transpose
+    for(int u = 0; u < size; u++)
+        for(int v = 0; v <= u; v++) {
+            std::complex<double> tmp = out[u][v];
+            out[u][v] = out[v][u];
+            out[v][u] = tmp;
+        }
+
+    k = 1;
+    for(r = 0; k < input.cols; (k <<= 1), r++);
+    // Transform by colums
+	for(int v = 0; v < output.cols; v++)	{
+        for(int u = 0; u < output.rows; u++) {
+            TD[u] = out[v][u];
+        }
+        fFt1dim(TD, out[v], r, flag);
+    }
+
+    // Transpose back
+    for(int u = 0; u < size; u++)
+        for(int v = 0; v <= u; v++) {
+            std::complex<double> tmp = out[u][v];
+            out[u][v] = out[v][u];
+            out[v][u] = tmp;
+        }
+
+    for(int u = 0; u < output.rows; u++)
+        for(int v = 0; v < output.cols; v++) {
+            output.at<Vec2f>(u, v)[0] = (float)out[u][v].real();
+            output.at<Vec2f>(u, v)[1] = (float)out[u][v].imag();
+        }
+
+    delete TD;
+}
+
 void dFt(Mat input, Mat &output, int flag = 1) {
     if(flag >= 0)
         dft(input, input);
     else
         dft(input, input, DFT_INVERSE);
-    input.copyTo(output);
+	input.copyTo(output);
     return;
 }
 
@@ -129,8 +233,6 @@ Mat ideal_lbrf_kernel(Mat src, float sigma) {
 }
 
 // 频率域滤波函数
-// src:原图像
-// blur:滤波器函数
 Mat freqFilt(Mat src) {
 // Pad
     int originalR = src.rows;
@@ -142,8 +244,8 @@ Mat freqFilt(Mat src) {
     copyMakeBorder(src, re, 0, paddedR - originalR, 0, paddedC - originalC, BORDER_CONSTANT, Scalar(0));
     // IMPORTANT! Don't f**king know why, but would incur ERRORS without it.
     re = Mat_<float>(re);
-
-    Mat blur =  ideal_lbrf_kernel(re, 50);
+// blur:滤波器函数
+    Mat blur =  ideal_lbrf_kernel(re, 200);
     //imshow("filt", Mat_<float>(blur));
 
 // *(-1)^(x+y)
@@ -152,17 +254,23 @@ Mat freqFilt(Mat src) {
     Mat cmplxImg;	// Complex Image
     merge(std::vector<Mat>({Mat_<float>(re), Mat::zeros(re.size(), CV_32F)}), cmplxImg);
 
-    dFt(cmplxImg, cmplxImg);
+	//My FFT
+	FFT(cmplxImg, cmplxImg);
+	// FFT in openCV
+    //dFt(cmplxImg, cmplxImg);
     //prtSpec(cmplxImg);
 
     for(int i = 0; i < cmplxImg.rows; i++)
         for(int j = 0; j < cmplxImg.cols; j++) {
             cmplxImg.at<Vec2f>(i, j)[0] *= blur.at<uchar>(i, j);
             cmplxImg.at<Vec2f>(i, j)[1] *= blur.at<uchar>(i, j);
-        }
+    }
     prtSpec(cmplxImg);
 
-    dFt(cmplxImg, cmplxImg, -1);
+	//My FFT
+	FFT(cmplxImg, cmplxImg, -1);
+	// FFT in openCV
+    //dFt(cmplxImg, cmplxImg, -1);
     std::vector<Mat> parts;
     split(cmplxImg, parts);
     parts[0] = Mat_<float>(parts[0]);
@@ -221,7 +329,7 @@ void Erode(Mat src, const Mat &tem, Mat &dst) {
 }
 
 
-// MAIN
+/****************************** MAIN **************************************/
 
 int main(int argc, char **argv) {
     VideoCapture capture;
