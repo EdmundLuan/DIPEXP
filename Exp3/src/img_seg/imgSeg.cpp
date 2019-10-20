@@ -82,7 +82,7 @@ void binaryzation(Mat input, Mat&output) {
 
 // Gradient Calculation
 Mat calcGrdnt(Mat img, Mat mskX, Mat mskY) {
-    Mat ret(img.rows, img.cols, CV_32F, Scalar::all(0));
+    Mat ret(img.rows, img.cols, CV_32FC(2), Scalar::all(0));
     if (mskX.rows != mskY.rows || mskX.cols != mskY.cols) {
         printf("\n2 Mask's sizes DO NOT match!\n");
         return ret;
@@ -98,8 +98,8 @@ Mat calcGrdnt(Mat img, Mat mskX, Mat mskY) {
                     tmpY += img.at<uchar>(s, t) * mskY.at<float>(s - i + mskY.rows / 2, t - j + mskY.cols / 2);
                 }
             }
-            ret.at<float>(i, j) = abs(tmpX) + abs(tmpY);
-            //ret.at<vec<float, 2 > >(i, j)[1] = abs(tmpX) < ZeroF ? (tmpY < 0 ? -pi / 2 : pi / 2 : ) : arctan(tmpY / tmpX);
+            ret.at<Vec2f>(i, j)[0] = abs(tmpX) + abs(tmpY);
+            ret.at<Vec2f>(i, j)[1] = abs(tmpX) < ZeroF ? (tmpY < 0 ? -pi / 2 : pi / 2 ) : atan(tmpY / tmpX);
         }
     return ret;
 }
@@ -112,6 +112,30 @@ void nmS(Mat input, Mat &output, int size) {
     for (int i = 0; i < input.rows; i++)
         for (int j = 0; j < input.cols; j++) {
             float maxP = 0.0f;
+            float &phi = input.at<Vec2f>(i, j)[1];
+            float &mag = input.at<Vec2f>(i, j)[0];
+            if(abs(phi) < pi / 8) { // Horizontal
+                for(int s = i - size / 2; s - size < i - size / 2; s++) {
+                    if (s < 0 || s >= input.rows) continue;
+                    maxP = maxP < input.at<Vec2f>(s, j)[0] ? input.at<Vec2f>(s, j)[0] : maxP;
+                }
+            } else if (phi > 3 * pi / 8 || phi < -3 * pi / 8) { // Vertical
+                for(int t = j - size / 2; t - size < j - size / 2; t++) {
+                    if (t < 0 || t >= input.cols) continue;
+                    maxP = maxP < input.at<Vec2f>(i, t)[0] ? input.at<Vec2f>(i, t)[0] : maxP;
+                }
+            } else if(phi > 0) { //+45 degree
+                for(int k = -size / 2; k - (-size / 2) < size; k++) {
+                    if(i + k < 0 || i + k >= input.rows || j + k < 0 || j + k >= input.rows) continue;
+                    maxP = maxP < input.at<Vec2f>(i + k, j + k)[0] ? input.at<Vec2f>(i + k, j + k)[0] : maxP;
+
+                }
+            } else {	// -45 degree
+                for(int k = -size / 2; k - (-size / 2) < size; k++) {
+                    if(i - k < 0 || i - k >= input.rows || j + k < 0 || j + k >= input.rows) continue;
+                    maxP = maxP < input.at<Vec2f>(i - k, j + k)[0] ? input.at<Vec2f>(i - k, j + k)[0] : maxP;
+                }
+          }
             for (int s = i - size / 2; s - size < i - size / 2; s++) {
                 if (s < 0 || s > input.rows) continue;
                 for (int t = j - size / 2; t - size < j - size / 2; t++) {
@@ -119,14 +143,17 @@ void nmS(Mat input, Mat &output, int size) {
                     maxP = maxP < input.at<float>(s, t) ? input.at<float>(s, t) : maxP;
                 }
             }
-            float &outij = output.at<float>(i, j);
+            float &outij = output.at<Vec2f>(i, j)[0];
             outij = abs(outij - maxP) < ZeroF ? outij  : 0;
         }
+	std::vector<Mat> chs;
+	split(output, chs);
+	output = chs[0].clone();
     return ;
 }
 
 // Delay Thresholding
-void delayThsh(Mat input, Mat &output, int tH, int tL) {
+void delayThsh(Mat input, Mat & output, int tH, float tL, int size = 3) {
     input.copyTo(output);
     tL = tH / tL;
     for (int i = 0; i < input.rows; i++)
@@ -135,8 +162,8 @@ void delayThsh(Mat input, Mat &output, int tH, int tL) {
                 output.at<float>(i, j) = 0;
             else if (input.at<float>(i, j) < tH) {
                 bool find = false;
-                for (int s = i - 1; s <= i + 1 && !find; s++)
-                    for (int t = j - 1; t <= j + 1 && !find; t++) {
+                for (int s = i - size/2; s-i+size/2 < size && !find; s++)
+                    for (int t = j - size/2; t-j+size/2 < size && !find; t++) {
                         if (s < 0 || s >= input.rows || t < 0 || t >= input.cols) continue;
                         if (input.at<float>(s, t) > tH)
                             find = true;
@@ -151,7 +178,7 @@ void delayThsh(Mat input, Mat &output, int tH, int tL) {
 }
 
 // Canny Filter
-void CannyFilt(Mat input, Mat &output) {
+void CannyFilt(Mat input, Mat & output) {
     input.copyTo(output);
 
     Mat grd;
@@ -162,14 +189,14 @@ void CannyFilt(Mat input, Mat &output) {
     // Non-maximum suppression
     nmS(grd, grd, 3);
     // Delay Thresholding
-    delayThsh(grd, grd, 42, 2);
+    delayThsh(grd, grd, 200, 2, 15);
     // Normalize to [0, 255]
     normalize(grd, grd, 0, 255, NORM_MINMAX);
     grd.convertTo(output, CV_8U);
 }
 
 // Line detection via Hough Transform
-void HoughLine(Mat input, Mat &output) {
+void HoughLine(Mat input, Mat & output) {
     output = Mat(input.rows, input.cols, CV_8U, Scalar(0));
     int rhoMax = (int)sqrt(input.rows * input.rows + input.cols * input.cols);
     int thetaMax = 91;
@@ -207,14 +234,13 @@ void HoughLine(Mat input, Mat &output) {
             if(abs(sin(pi / 2 / thetaMax * thetas[i])) < ZeroF) {	// sin(theta) == 0, a vertical line
                 if(x != rhos[i]) continue;
                 for(int y = 0; y < input.cols; y++) {
-                    if(input.at<uchar>(x, y) < 250) continue;
+                    //    if(input.at<uchar>(x, y) < 250) continue;
                     output.at<uchar>(x, y) = 255;
                 }
             } else {
                 int y = (int)((rhos[i] - x * cos(pi / 2 / thetaMax * thetas[i])) / sin(pi / 2 / thetaMax * thetas[i]) + 0.5);
-                //y = abs(y);
                 if(y > 0 && y < output.cols) {
-                    if(input.at<uchar>(x, y) < 250) continue;
+                    //    if(input.at<uchar>(x, y) < 250) continue;
                     output.at<uchar>(x, y) = 255;
                 }
             }
@@ -223,12 +249,13 @@ void HoughLine(Mat input, Mat &output) {
 }
 
 // Circle Detection via Hough Transform
-void HoughCirc(Mat input, Mat &output) {
+void HoughCirc(Mat input, Mat & output) {
     output = Mat(input.rows, input.cols, CV_8U, Scalar(0));
-    int rMax = (int)(sqrt(sqr(input.rows) + sqr(input.cols)) + 0.5);
-    int aMax = 20;
-    int bMax = 20;
-    int threshold = 300;
+    //int rMax = (int)(sqrt(sqr(input.rows) + sqr(input.cols)) + 0.5);
+    int rMax = 100;
+    int aMax = 150;
+    int bMax = 150;
+    int threshold = 350;
     typedef std::vector<int> vi;
     typedef std::vector<vi> vii;
     vi zero1d(bMax, 0);
@@ -241,7 +268,7 @@ void HoughCirc(Mat input, Mat &output) {
             if(input.at<uchar>(x, y) < 250)	continue;
             for(int a = 0; a < aMax; a++) for(int b = 0; b < bMax; b++) {
                     int r = (int)(sqrt(sqr(x - a) + sqr(x - b)) + 0.5);
-                    if(r > rMax) continue;
+                    if(r >= rMax) continue;
                     ++argCnt.at(r).at(a).at(b);
                     if(argFlag[r][a][b] == 0 && argCnt[r][a][b] > threshold) {
                         as.push_back(a);
@@ -251,11 +278,16 @@ void HoughCirc(Mat input, Mat &output) {
                     }
                 }
         }
+    printf("%d\n", rs.size());
+    for(int i = 0; i < rs.size(); i++ ) {
+        printf("r=%d  a=%d  b=%d\n", rs[i], as[i], bs[i]);
+    }
     // Draw circles
     for(int i = 0; i < rs.size(); i++ )
         for(int x = 0; x < output.rows; x++) {
             int t1 = sqr(rs[i]) - sqr(x - as[i]);
             if(t1 < 0) continue;
+
             int tmp = (int)(sqrt(t1) + 0.5);
             int y = bs[i] - tmp;
             if(y < 0 || y >= output.cols ) continue;
@@ -301,24 +333,26 @@ int main(int argc, char **argv) {
         cvtColor(frIn, frIn, CV_BGR2GRAY);
         imshow("Convert to Gray", frIn);
 // 高斯平滑处理
-        Mat dst(frIn.rows, frIn.cols, CV_8U);
-        Gaussian(frIn, frIn, 4, 5);
+        Gaussian(frIn, frIn, 3, 3);
         imshow("Spatial Gaussian", frIn);
 // 二值化
 //        binaryzation(frIn, frIn);
 //        imshow("Binarized",  frIn);
 // Canny边缘检测
-        Mat bndry;
+        Mat bndry = frIn.clone();
         CannyFilt(frIn, bndry);
         binaryzation(bndry, bndry);
         imshow("Boundaries", bndry);
+        Mat canny ;
+        Canny(frIn, canny, 100, 200);
+        imshow("OpenCV Canny", canny);
 // Hough线检测
         Mat detect;
-//        HoughLine(bndry, detect);
+//        HoughLine(canny, detect);
 //        imshow("Line Detection", detect);
 // Hough圆检测
-        HoughCirc(bndry, detect);
-        imshow("Circle Detection", detect);
+//        HoughCirc(canny, detect);
+//        imshow("Circle Detection", detect);
 
         ros::spinOnce();
         waitKey(5);
