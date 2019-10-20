@@ -7,10 +7,6 @@
 #IncludeRegexTransform: 
 
 /home/edmund/run/DIPEXP/Exp3/src/img_seg/imgSeg.cpp
-cstdio
--
-cstdlib
--
 cmath
 -
 cstring

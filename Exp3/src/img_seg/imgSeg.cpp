@@ -1,5 +1,3 @@
-#include <cstdio>
-#include <cstdlib>
 #include <cmath>
 #include <cstring>
 #include <complex>
@@ -227,23 +225,23 @@ void HoughLine(Mat input, Mat &output) {
 // Circle Detection via Hough Transform
 void HoughCirc(Mat input, Mat &output) {
     output = Mat(input.rows, input.cols, CV_8U, Scalar(0));
-    int r2Max = (int)(input.rows * input.rows + input.cols * input.cols);
-    int aMax = input.rows;
-    int bMax = input.cols;
-    int threshold = 30;
+    int rMax = (int)(sqrt(sqr(input.rows) + sqr(input.cols)) + 0.5);
+    int aMax = 20;
+    int bMax = 20;
+    int threshold = 300;
     typedef std::vector<int> vi;
     typedef std::vector<vi> vii;
     vi zero1d(bMax, 0);
     vii zero2d(aMax, zero1d);
-    std::vector<vii> argCnt(r2Max, zero2d), argFlag(r2Max, zero2d);
+    std::vector<vii> argCnt(rMax, zero2d), argFlag(rMax, zero2d);
     std::vector<int> as, bs, rs;
 
     for(int x = 0; x < input.rows; x++)
         for(int y = 0; y < input.cols; y++) {
             if(input.at<uchar>(x, y) < 250)	continue;
             for(int a = 0; a < aMax; a++) for(int b = 0; b < bMax; b++) {
-                    int r = (int)(sqr(x - a) + sqr(x - b) + 0.5);
-                    if(r > r2Max) continue;
+                    int r = (int)(sqrt(sqr(x - a) + sqr(x - b)) + 0.5);
+                    if(r > rMax) continue;
                     ++argCnt.at(r).at(a).at(b);
                     if(argFlag[r][a][b] == 0 && argCnt[r][a][b] > threshold) {
                         as.push_back(a);
@@ -256,14 +254,14 @@ void HoughCirc(Mat input, Mat &output) {
     // Draw circles
     for(int i = 0; i < rs.size(); i++ )
         for(int x = 0; x < output.rows; x++) {
-			int t1 =rs[i] - sqr(x - as[i]);
-			if(t1<0) continue;
-			int tmp = (int)(sqrt(t1) + 0.5);
+            int t1 = sqr(rs[i]) - sqr(x - as[i]);
+            if(t1 < 0) continue;
+            int tmp = (int)(sqrt(t1) + 0.5);
             int y = bs[i] - tmp;
             if(y < 0 || y >= output.cols ) continue;
             // if(input.at<uchar>(x,y)>250) continue;
             output.at<uchar>(x, y) = 255;
-            y = bs[i] + tmp; 
+            y = bs[i] + tmp;
             if(y < 0 || y >= output.cols ) continue;
             // if(input.at<uchar>(x,y)>250) continue;
             output.at<uchar>(x, y) = 255;
