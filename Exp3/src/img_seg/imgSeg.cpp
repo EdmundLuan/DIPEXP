@@ -24,7 +24,7 @@ const float ZeroF = 0.000001f;
 
 #define sqr(x) ((x)*(x))
 
-/*================================ Function ===================================*/
+/*=============================== Function ==================================*/
 // 空域高斯掩模
 inline Mat GssMsk(int size, int sigma) {
     Mat ret(size, size, CV_64F);
@@ -256,7 +256,9 @@ void HoughCirc(Mat input, Mat &output) {
     // Draw circles
     for(int i = 0; i < rs.size(); i++ )
         for(int x = 0; x < output.rows; x++) {
-			int tmp = (int)(sqrt(rs[i] - sqr(x - as[i])) + 0.5);
+			int t1 =rs[i] - sqr(x - as[i]);
+			if(t1<0) continue;
+			int tmp = (int)(sqrt(t1) + 0.5);
             int y = bs[i] - tmp;
             if(y < 0 || y >= output.cols ) continue;
             // if(input.at<uchar>(x,y)>250) continue;
@@ -314,11 +316,11 @@ int main(int argc, char **argv) {
         imshow("Boundaries", bndry);
 // Hough线检测
         Mat detect;
-        HoughLine(bndry, detect);
-        imshow("Line Detection", detect);
+//        HoughLine(bndry, detect);
+//        imshow("Line Detection", detect);
 // Hough圆检测
-//        HoughCirc(bndry, detect);
-//        imshow("Circle Detection", detect);
+        HoughCirc(bndry, detect);
+        imshow("Circle Detection", detect);
 
         ros::spinOnce();
         waitKey(5);
