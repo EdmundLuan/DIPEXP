@@ -195,7 +195,7 @@ void HoughLine(Mat input, Mat & output) {
     output = Mat(input.rows, input.cols, CV_8U, Scalar(0));
     int rhoMax = (int)sqrt(sqr(input.rows) + sqr(input.cols) + 0.5);
     int thetaMax = 90;
-    int threshold = 30;
+    int threshold = 40;
 
     typedef std::vector<int> veci;
     veci zeros(rhoMax, 0);
@@ -218,11 +218,11 @@ void HoughLine(Mat input, Mat & output) {
                 }
             }
         }
-    printf("%d lines found.\n", thetas.size());
+//    printf("%d lines found.\n", thetas.size());
 //    for(int i = 0; i < thetas.size(); i++) {
 //        printf("rho=%d  theta=%f\n", rhos[i], 90.0 * thetas[i] / thetaMax);
 //    }
-    putchar(10);
+//    putchar(10);
     // paint the lines here.
     for (int x = 0; x < input.rows; x++) {
         for (int i = 0; i < rhos.size(); i++) {
@@ -249,12 +249,12 @@ inline int calcSub(T val, T step) {
 }
 
 // Circle Detection via Hough Transform
-void HoughCirc(Mat input, Mat & output) {
+void HoughCirc(Mat input, Mat & output, Mat src) {
     output = Mat(input.rows, input.cols, CV_8U, Scalar(0));
     // Subdivision of r, rho, theta
     int rMax = 100;
-    int rhoMax = 120;
-    int thetaMax = 90;
+    int rhoMax = 20;
+    int thetaMax = 30;
     int threshold = 360;
     float stpR = (sqrt(sqr(input.rows) + sqr(input.cols)) + 0.5) / rMax;
     float stpRho = (sqrt(sqr(input.rows) + sqr(input.cols)) + 0.5) / rhoMax;
@@ -278,9 +278,6 @@ void HoughCirc(Mat input, Mat & output) {
                         argCnt.at(r).at(rho).at(theta)++;
                         if (argFlag[r][rho][theta] == 0 && argCnt[r][rho][theta] > threshold) {
                             argFlag[r][rho][theta] = 1;
-//                            rs.push_back(rf);
-//                            rhos.push_back(rhof);
-//                            thetas.push_back(thetaf);
                         }
                     }
                 }
@@ -297,32 +294,27 @@ void HoughCirc(Mat input, Mat & output) {
                 if(theta > 0) maxCnt = MAX(maxCnt, argCnt[r][rho][theta - 1]);
                 if(theta < thetaMax - 1) maxCnt = MAX(maxCnt, argCnt[r][rho][theta + 1]);
                 if(maxCnt != rrhot) continue;
-                rs.push_back(stpR*(r+0.5));
-                rhos.push_back(stpRho*(rho+0.5));
-                thetas.push_back(stpTheta*(theta+0.5));
+                rs.push_back(stpR * (r + 0.5));
+                rhos.push_back(stpRho * (rho + 0.5));
+                thetas.push_back(stpTheta * (theta + 0.5));
             }
-    printf("%d circles detected.\n", rs.size());
-    putchar(10);
+    //printf("%d circles detected.\n", rs.size());
+    //putchar(10);
 
     // Draw circles
     for (int i = 0; i < rs.size(); i++) {
         int x = rhos[i] * cos(thetas[i]) + 0.5;
         int y = rhos[i] * sin(thetas[i]) + 0.5;
         int r = rs[i] + 0.5;
-        printf("x=%d  y=%d  r=%d\n", x, y, r);
         circle(output, Point(x, y), r, (255, 255, 255), 1);
     }
-}
-
-void CVHoughCircles(const Mat& input, Mat &output) {
-    output = Mat(input.rows, input.cols, CV_8U, Scalar(0));
     vector<Vec3f> circles;
-    HoughCircles(input, circles, HOUGH_GRADIENT, 1, input.rows / 2, 150, 100, 0, 100);
-    printf("OpenCV detected: %u\n\n", circles.size());
+    output.convertTo(output, CV_8UC3);
+    HoughCircles(src, circles, CV_HOUGH_GRADIENT, 1, input.rows / 3, 150, 100, 0, 100);
     for (size_t i = 0; i < circles.size(); i++) {
         Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
         int radius = cvRound(circles[i][2]);
-        circle(output, center, radius, Scalar(255, 255, 255), 1);
+//        circle(output, center, radius, Scalar(255, 255, 255), 1);
     }
 }
 
@@ -353,32 +345,39 @@ int main(int argc, char **argv) {
         }
 // Mat frIn = frame();//使用笔记本摄像头
         Mat frIn = frame(cv::Rect(0, 0, frame.cols / 2, frame.rows));//截取 zed 的左目图片
-        koubian = imread("/home/edmund/run/DIPEXP/Exp3/src/img_seg/.png");
-        imshow("Original", frIn);
+        Mat koubian = imread("/home/edmund/run/DIPEXP/Exp3/src/img_seg/bndry.png");
+        imshow("1", koubian);
+        Mat xian = imread("/home/edmund/run/DIPEXP/Exp3/src/img_seg/lines.png");
+        imshow("2", xian);
+        Mat yuan = imread("/home/edmund/run/DIPEXP/Exp3/src/img_seg/test2.png");
+        imshow("3", yuan);
 // 转化成灰度图
-        cvtColor(frIn, frIn, CV_BGR2GRAY);
+        cvtColor(koubian, koubian, CV_BGR2GRAY);
+        cvtColor(xian, xian, CV_BGR2GRAY);
+        cvtColor(yuan, yuan, CV_BGR2GRAY);
 // 高斯平滑处理
-        Gaussian(frIn, frIn, 1, 3);
-// 二值化
-//        binaryzation(frIn, frIn);
-//        imshow("Binarized",  frIn);
+        Gaussian(koubian, koubian, 1, 3);
+        Gaussian(xian, xian, 1, 3);
+        Gaussian(yuan, yuan, 1, 3);
 // Canny边缘检测
-        Mat bndry = frIn.clone();
-        CannyFilt(frIn, bndry);
-        //binaryzation(bndry, bndry);
+        Mat bndry = koubian.clone();
+        CannyFilt(koubian, bndry);
         imshow("Boundaries", bndry);
-//        Mat canny ;
-//        Canny(frIn, canny, 100, 200);
-//        imshow("OpenCV Canny", canny);
+
+        Mat bXian = xian.clone();
+        CannyFilt(xian, bXian);
+        imshow("Line Boundry", bXian);
+
+        Mat bYuan = yuan.clone();
+        CannyFilt(yuan, bYuan);
+        imshow("Circle Boundaries", bYuan);
 // Hough线检测
         Mat detect;
-        //HoughLine(bndry, detect);
-        //imshow("Line Detection", detect);
+        HoughLine(bXian, detect);
+        imshow("Line Detection", detect);
 // Hough圆检测
-        HoughCirc(bndry, detect);
+        HoughCirc(bYuan, detect, yuan);
         imshow("Circle Detection", detect);
-        CVHoughCircles(frIn, detect);
-        imshow("Circle Detection2", detect);
 
         ros::spinOnce();
         waitKey(10);
