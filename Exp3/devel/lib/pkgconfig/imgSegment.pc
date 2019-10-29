@@ -1,0 +1,8 @@
+prefix=/home/edmund/run/DIPEXP/Exp3/devel
+
+Name: imgSegment
+Description: Description of imgSegment
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/edmund/run/DIPEXP/Exp3/devel/lib 
+Requires: 

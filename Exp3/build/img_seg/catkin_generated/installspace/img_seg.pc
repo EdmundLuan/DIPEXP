@@ -1,0 +1,8 @@
+prefix=/home/edmund/run/DIPEXP/Exp3/install
+
+Name: img_seg
+Description: Description of img_seg
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/edmund/run/DIPEXP/Exp3/install/lib 
+Requires: 
