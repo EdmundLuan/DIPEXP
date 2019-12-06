@@ -1,0 +1,3 @@
+/home/ou/桌面/数字图像处理/第四次实验/build/CMakeFiles/edit_cache.dir
+/home/ou/桌面/数字图像处理/第四次实验/build/CMakeFiles/rebuild_cache.dir
+/home/ou/桌面/数字图像处理/第四次实验/build/CMakeFiles/exp4.dir
