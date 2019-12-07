@@ -24,7 +24,7 @@ static void onChange(int, void*) {
 }
 
 void clrSeg(const Mat& src, Mat& des) {
-    int minH = 10, minS = 0, minV = 221;
+    int minH = 10, minS = 0, minV = 201;
     int maxH = 180, maxS = 50, maxV = 255;
     //createTrackbar("minH", "src", &minH, 179, onChange, 0);
     inRange(src, Scalar(minH, minS, minV), Scalar(maxH, maxS, maxV), des);
@@ -47,6 +47,7 @@ void dtmPrkMrk(const Mat& src, Mat& mrk) {
 // Find contours
     vector<vector<Point> > contours;
     vector<Vec4i> hierarchy;
+	int areaThreshold = 500;
     Mat cntrPic = Mat::zeros(edges.rows, edges.cols, CV_8UC3);
 
     findContours(edges, contours, hierarchy, RETR_CCOMP, CHAIN_APPROX_SIMPLE);
@@ -54,14 +55,23 @@ void dtmPrkMrk(const Mat& src, Mat& mrk) {
         drawContours(cntrPic, contours, i, Scalar(255, 255, 255), 1);
 //	imshow("contours", cntrPic);
 
-//	Find Rectangles
-    vector<Rect> polyCntrs(contours.size());
-    for(int i = 0; i < contours.size(); i++) {
-        polyCntrs[i] = boundingRect(contours[i] );
-    }
-    for(int i = 0; i < contours.size(); i++)
-        rectangle(cntrPic, polyCntrs[i], Scalar(0, 0, 255));
+//	Find convexHull
+	vector<vector<Point> > hull(contours.size());
+	for(int i=0;i<contours.size();i++){
+		if(contourArea(contours[i])<areaThreshold) continue;
+		convexHull(Mat(contours[i]),hull[i],false);
+		drawContours(cntrPic, hull, i, Scalar(0,0,255), 1);
+	}
     imshow("contours", cntrPic);
+
+
+
+//    vector<Rect> polyCntrs(contours.size());
+//    for(int i = 0; i < contours.size(); i++) {
+//        polyCntrs[i] = boundingRect(contours[i] );
+//    }
+//    for(int i = 0; i < contours.size(); i++)
+//        rectangle(cntrPic, polyCntrs[i], Scalar(0, 0, 255));
 }
 
 
