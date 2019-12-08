@@ -194,7 +194,7 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
-add_executable(autopark autopark.cpp)
-target_link_libraries(autopark ${catkin_LIBRARIES}
+add_executable(control control.cpp)
+target_link_libraries(control ${catkin_LIBRARIES}
                                   ${OpenCV_LIBS})
 

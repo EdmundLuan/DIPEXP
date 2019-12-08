@@ -66,17 +66,6 @@ list_install_components/fast: list_install_components
 
 .PHONY : list_install_components/fast
 
-# Special rule for the target rebuild_cache
-rebuild_cache:
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running CMake to regenerate build system..."
-	/usr/bin/cmake -H$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR)
-.PHONY : rebuild_cache
-
-# Special rule for the target rebuild_cache
-rebuild_cache/fast: rebuild_cache
-
-.PHONY : rebuild_cache/fast
-
 # Special rule for the target edit_cache
 edit_cache:
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "No interactive CMake dialog available..."
@@ -87,6 +76,17 @@ edit_cache:
 edit_cache/fast: edit_cache
 
 .PHONY : edit_cache/fast
+
+# Special rule for the target rebuild_cache
+rebuild_cache:
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running CMake to regenerate build system..."
+	/usr/bin/cmake -H$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR)
+.PHONY : rebuild_cache
+
+# Special rule for the target rebuild_cache
+rebuild_cache/fast: rebuild_cache
+
+.PHONY : rebuild_cache/fast
 
 # Special rule for the target test
 test:
@@ -271,21 +271,6 @@ std_msgs_generate_messages_cpp/fast:
 .PHONY : std_msgs_generate_messages_cpp/fast
 
 # Convenience name for target.
-parking/CMakeFiles/autopark.dir/rule:
-	cd /home/edmund/run/DIPEXP/Proj/build && $(MAKE) -f CMakeFiles/Makefile2 parking/CMakeFiles/autopark.dir/rule
-.PHONY : parking/CMakeFiles/autopark.dir/rule
-
-# Convenience name for target.
-autopark: parking/CMakeFiles/autopark.dir/rule
-
-.PHONY : autopark
-
-# fast build rule for target.
-autopark/fast:
-	cd /home/edmund/run/DIPEXP/Proj/build && $(MAKE) -f parking/CMakeFiles/autopark.dir/build.make parking/CMakeFiles/autopark.dir/build
-.PHONY : autopark/fast
-
-# Convenience name for target.
 parking/CMakeFiles/roscpp_generate_messages_eus.dir/rule:
 	cd /home/edmund/run/DIPEXP/Proj/build && $(MAKE) -f CMakeFiles/Makefile2 parking/CMakeFiles/roscpp_generate_messages_eus.dir/rule
 .PHONY : parking/CMakeFiles/roscpp_generate_messages_eus.dir/rule
@@ -405,32 +390,47 @@ std_msgs_generate_messages_lisp/fast:
 	cd /home/edmund/run/DIPEXP/Proj/build && $(MAKE) -f parking/CMakeFiles/std_msgs_generate_messages_lisp.dir/build.make parking/CMakeFiles/std_msgs_generate_messages_lisp.dir/build
 .PHONY : std_msgs_generate_messages_lisp/fast
 
-autopark.o: autopark.cpp.o
+# Convenience name for target.
+parking/CMakeFiles/control.dir/rule:
+	cd /home/edmund/run/DIPEXP/Proj/build && $(MAKE) -f CMakeFiles/Makefile2 parking/CMakeFiles/control.dir/rule
+.PHONY : parking/CMakeFiles/control.dir/rule
 
-.PHONY : autopark.o
+# Convenience name for target.
+control: parking/CMakeFiles/control.dir/rule
+
+.PHONY : control
+
+# fast build rule for target.
+control/fast:
+	cd /home/edmund/run/DIPEXP/Proj/build && $(MAKE) -f parking/CMakeFiles/control.dir/build.make parking/CMakeFiles/control.dir/build
+.PHONY : control/fast
+
+control.o: control.cpp.o
+
+.PHONY : control.o
 
 # target to build an object file
-autopark.cpp.o:
-	cd /home/edmund/run/DIPEXP/Proj/build && $(MAKE) -f parking/CMakeFiles/autopark.dir/build.make parking/CMakeFiles/autopark.dir/autopark.cpp.o
-.PHONY : autopark.cpp.o
+control.cpp.o:
+	cd /home/edmund/run/DIPEXP/Proj/build && $(MAKE) -f parking/CMakeFiles/control.dir/build.make parking/CMakeFiles/control.dir/control.cpp.o
+.PHONY : control.cpp.o
 
-autopark.i: autopark.cpp.i
+control.i: control.cpp.i
 
-.PHONY : autopark.i
+.PHONY : control.i
 
 # target to preprocess a source file
-autopark.cpp.i:
-	cd /home/edmund/run/DIPEXP/Proj/build && $(MAKE) -f parking/CMakeFiles/autopark.dir/build.make parking/CMakeFiles/autopark.dir/autopark.cpp.i
-.PHONY : autopark.cpp.i
+control.cpp.i:
+	cd /home/edmund/run/DIPEXP/Proj/build && $(MAKE) -f parking/CMakeFiles/control.dir/build.make parking/CMakeFiles/control.dir/control.cpp.i
+.PHONY : control.cpp.i
 
-autopark.s: autopark.cpp.s
+control.s: control.cpp.s
 
-.PHONY : autopark.s
+.PHONY : control.s
 
 # target to generate assembly for a file
-autopark.cpp.s:
-	cd /home/edmund/run/DIPEXP/Proj/build && $(MAKE) -f parking/CMakeFiles/autopark.dir/build.make parking/CMakeFiles/autopark.dir/autopark.cpp.s
-.PHONY : autopark.cpp.s
+control.cpp.s:
+	cd /home/edmund/run/DIPEXP/Proj/build && $(MAKE) -f parking/CMakeFiles/control.dir/build.make parking/CMakeFiles/control.dir/control.cpp.s
+.PHONY : control.cpp.s
 
 # Help Target
 help:
@@ -442,13 +442,12 @@ help:
 	@echo "... std_msgs_generate_messages_py"
 	@echo "... roscpp_generate_messages_py"
 	@echo "... rosgraph_msgs_generate_messages_eus"
+	@echo "... edit_cache"
 	@echo "... rosgraph_msgs_generate_messages_nodejs"
 	@echo "... rebuild_cache"
 	@echo "... roscpp_generate_messages_cpp"
 	@echo "... rosgraph_msgs_generate_messages_cpp"
 	@echo "... std_msgs_generate_messages_cpp"
-	@echo "... edit_cache"
-	@echo "... autopark"
 	@echo "... roscpp_generate_messages_eus"
 	@echo "... rosgraph_msgs_generate_messages_py"
 	@echo "... rosgraph_msgs_generate_messages_lisp"
@@ -458,12 +457,13 @@ help:
 	@echo "... roscpp_generate_messages_lisp"
 	@echo "... std_msgs_generate_messages_eus"
 	@echo "... std_msgs_generate_messages_lisp"
+	@echo "... control"
 	@echo "... install/strip"
 	@echo "... install/local"
 	@echo "... install"
-	@echo "... autopark.o"
-	@echo "... autopark.i"
-	@echo "... autopark.s"
+	@echo "... control.o"
+	@echo "... control.i"
+	@echo "... control.s"
 .PHONY : help
 
 

@@ -374,19 +374,6 @@ std_msgs_generate_messages_cpp/fast:
 .PHONY : std_msgs_generate_messages_cpp/fast
 
 #=============================================================================
-# Target rules for targets named autopark
-
-# Build rule for target.
-autopark: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 autopark
-.PHONY : autopark
-
-# fast build rule for target.
-autopark/fast:
-	$(MAKE) -f parking/CMakeFiles/autopark.dir/build.make parking/CMakeFiles/autopark.dir/build
-.PHONY : autopark/fast
-
-#=============================================================================
 # Target rules for targets named roscpp_generate_messages_eus
 
 # Build rule for target.
@@ -490,6 +477,19 @@ std_msgs_generate_messages_lisp/fast:
 	$(MAKE) -f parking/CMakeFiles/std_msgs_generate_messages_lisp.dir/build.make parking/CMakeFiles/std_msgs_generate_messages_lisp.dir/build
 .PHONY : std_msgs_generate_messages_lisp/fast
 
+#=============================================================================
+# Target rules for targets named control
+
+# Build rule for target.
+control: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 control
+.PHONY : control
+
+# fast build rule for target.
+control/fast:
+	$(MAKE) -f parking/CMakeFiles/control.dir/build.make parking/CMakeFiles/control.dir/build
+.PHONY : control/fast
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -519,7 +519,6 @@ help:
 	@echo "... roscpp_generate_messages_cpp"
 	@echo "... rosgraph_msgs_generate_messages_cpp"
 	@echo "... std_msgs_generate_messages_cpp"
-	@echo "... autopark"
 	@echo "... roscpp_generate_messages_eus"
 	@echo "... rosgraph_msgs_generate_messages_py"
 	@echo "... rosgraph_msgs_generate_messages_lisp"
@@ -528,6 +527,7 @@ help:
 	@echo "... roscpp_generate_messages_lisp"
 	@echo "... std_msgs_generate_messages_eus"
 	@echo "... std_msgs_generate_messages_lisp"
+	@echo "... control"
 .PHONY : help
 
 
