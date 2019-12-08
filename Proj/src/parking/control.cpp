@@ -11,20 +11,24 @@
 using namespace std;
 using namespace cv;
 
-#define kp1 (1.2)
-#define kd1 (0.27)
-#define kp2 (0.008)
 #define MAX_TURN (3)
 #define NORM2(a,b) ((a)*(a)+(b)*(b))
 #define EPS 0.000001
-double last_angle = 0;
+#define PERIORD 5
+#define X0_car 330
+#define Y0_car 474
+
+double last_angle = -1;
 double last_bs = 0;
+double last_vx = 0;
+double last_omegaz = 0;
 double slope_mean = 0;
 double bs_mean  = 0;
-//double point_ground =0;
-//double a_z=0;
-//int fast_time=0;
-//int line_state=-1;//-1->left  1->right
+double errDist[3] = {0};
+double errAng[3] = {0};
+RotatedRect maxRect;
+Point2f meet;
+int sgn = 1;
 bool ISOBS = false;
 bool flag = 0; //是否到达直线
 void obsCallback(const std_msgs::Bool _isObs) {
@@ -50,7 +54,7 @@ void perspectiveTransform(const Mat& src, Mat& img_trans) {
     warpPerspective(src, img_trans, transform, Size(src.cols, src.rows), cv::INTER_AREA);
 }
 
-void drawRect(Mat& img, RotatedRect &rect, Scalar clr=(255,255,255), int thickness=1, int lineType=8) {
+void drawRect(Mat& img, RotatedRect &rect, Scalar clr = (255, 255, 255), int thickness = 1, int lineType = 8) {
     Point2f rectPoints[4];
     rect.points(rectPoints);
     for(int j = 0; j < 4; j++) {
@@ -61,45 +65,91 @@ void drawRect(Mat& img, RotatedRect &rect, Scalar clr=(255,255,255), int thickne
 //检查数据
 void check(double & angle, double & bs) {
     //剔除野点_角度
-    if (last_angle == 0) {
+    if (last_angle == -1) {
+        // 初值
         last_angle = angle;
-    } else if (abs(angle - last_angle) > 10 && last_angle != 0 ) {
+    } else if (abs(angle - last_angle) > 75) {
+        // 野点剔除
         angle = last_angle;
     }
+    // 更新
+    last_angle = angle;
 
     //剔除野点_截距
-    if (last_bs == 0) {
-        last_bs = bs;
-    } else if (abs(bs - last_bs) > 1000 && last_bs != 0 ) {
-        bs = last_bs;
-    }
+//    if (last_bs == 0) {
+//        last_bs = bs;
+//    } else if (abs(bs - last_bs) > 1000 && last_bs != 0 ) {
+//        bs = last_bs;
+//    }
 }
+double PIDlinear(double angle, double bs, double errDist[], double&  last_vx) {
+    const double Kp = 0.0001f;
+    const double Ti = 1000;
+    const double Td = 0;
+    const double T = PERIORD;
+    const double MaxVx = 0.3;
 
-double PIDlinear(double angle, double bs) {
-    const double kp_linear = 1 / 1000;
-    const double ki_linear = 1 / 1000;
-    const double kd_linear = 1 / 1000;
-    double dist, last_dist;
+    double q0 = Kp * (1 + T / Ti + Td / T);
+    double q1 = -Kp * (1 + 2 * Td / T);
+    double q2 = Kp * Td / T;
     double vx;
-    //计算距离
-    dist = 374 - 1 / (tan(angle * (330 - bs)));
-    last_dist = 374 - 1 / (tan(last_angle * (330 - last_bs)));
 
-    vx = kp_linear * dist + ki_linear * (last_dist + dist) + kd_linear * (dist - last_dist);
+    //计算距离, 控制目标是0
+    errDist[0] = Y0_car - 1 / tan(angle) * (330 - bs);
 
+    vx = last_vx + q0 * errDist[0] + q1 * errDist[1] + q2 * errDist[2];
+
+    errDist[2] = errDist[1];
+    errDist[1] = errDist[0];
+
+    if(vx > MaxVx)
+        vx = MaxVx;
+    else if(vx < -MaxVx)
+        vx = -MaxVx;
+
+    last_vx = vx;
+
+    cout << "dist :  " << errDist[0] << endl;
+    cout << "vx :  " << vx << "   Last vx : " << last_vx << endl;
     return vx;
 }
 
-double PIDangle(double angle, double bs) {
-    const double kp_angle = 1 / 100;
-    const double ki_angle = 1 / 100;
-    const double kd_angle = 1 / 100;
+double PIDangle(double angle, double bs, double errAng[], double & last_omegaz) {
+    const double Kp = -0.011f;
+    const double Ti = 800;
+    const double Td = 0;
+    const double T = PERIORD;
+    const double MaxOmegaz = 0.5;
+    const double ThresholdInv = 1;
+
+    double q0 = Kp * (1 + T / Ti + Td / T);
+    double q1 = -Kp * (1 + 2 * Td / T);
+    double q2 = Kp * Td / T;
+    double dist = 0, ance = 0;
+    int inv = 1;
     double omegaz;
-    double errAng = angle - 90;
-    double last_errAng = last_angle - 90;
+    // 角度控制目标是90
+    errAng[0] = 90 - angle;
 
-    omegaz = kp_angle * errAng + ki_angle * (last_errAng + errAng) + kd_angle * (errAng - last_errAng);
+    dist = Y0_car - meet.y;
+    ance = sgn * sqrt(NORM2(meet.x - maxRect.center.x, meet.y - maxRect.center.y)  );
+    inv = ance * ThresholdInv > dist ? 1 : -1;
 
+    omegaz = last_omegaz + q0 * errAng[0] + q1 * errAng[1] + q2 * errAng[2];
+    omegaz *= inv;
+
+    errAng[2] = errAng[1];
+    errAng[1] = errAng[0];
+
+    if(omegaz > MaxOmegaz)
+        omegaz = MaxOmegaz;
+    else if(omegaz < -MaxOmegaz)
+        omegaz = -MaxOmegaz;
+
+    last_omegaz = omegaz;
+
+    cout << "Error Angle:  " << errAng[0] << endl;
+    cout << "Omegaz :  " << omegaz << "    Last Omegaz:  " << last_omegaz << endl;
     return omegaz;
 }
 
@@ -133,26 +183,24 @@ int main(int argc, char **argv) {
         cvtColor(color, color, COLOR_BGR2HSV);
 
         // 颜色分割
-        inRange(color, Scalar(35, 43, 46), Scalar(99, 255, 255), color);
+        inRange(color, Scalar(35, 43, 46), Scalar(79, 255, 255), color);
         imshow("color", color);
 //===============================透视变换、边缘二值图=========================================
 
         perspectiveTransform(color, img_trans);
-        dstImg = Mat::zeros(img_trans.rows, img_trans.cols, CV_8U);
-        //morphOpt(img_trans, dstImg);
-        Canny(img_trans, img_trans, 100, 300, 3);
+        dstImg = Mat::zeros(img_trans.rows, img_trans.cols, CV_8UC3);
+        Canny(img_trans, dstImg, 100, 300, 3);
         //dstImg=img_trans.clone();
-        imshow("img_trans", img_trans);
+        imshow("img_trans", dstImg);
 
 
         // Find contours
         vector<vector<Point> > contours;
         vector<Vec4i> hierarchy;
         Mat cntrPic = Mat::zeros(dstImg.rows, dstImg.cols, CV_8UC3);
-        findContours(img_trans, contours, hierarchy, RETR_CCOMP, CHAIN_APPROX_SIMPLE);
+        findContours(dstImg, contours, hierarchy, RETR_CCOMP, CHAIN_APPROX_SIMPLE);
         // Bounding rectangle and Draw
         vector<RotatedRect> rects(contours.size());
-        RotatedRect maxRect;
         double maxArea = 0;
         for(int i = 0; i < contours.size(); i++) {
             rects[i] = minAreaRect(Mat(contours[i]));
@@ -168,8 +216,8 @@ int main(int argc, char **argv) {
         }
         drawRect(cntrPic, maxRect, Scalar(255, 255, 255), 2);
 
-       imshow("img_trans", dstImg);
-        
+        imshow("img_trans", dstImg);
+
         // 找出面积最大的矩形的2条长边，二者均值作为轴线
         double angle;
         slope_mean = 0;
@@ -177,11 +225,12 @@ int main(int argc, char **argv) {
         Point2f pts[4];
         // 矩形的四个点0,1,2,3按逆时针顺序排列
         maxRect.points(pts);
-        circle(cntrPic, pts[0],10, Scalar(255,0,0));    //Red
-        circle(cntrPic, pts[1],10, Scalar(0,255,0));    //Green
-        circle(cntrPic, pts[2],10, Scalar(0,0,255));    // Blue
-        circle(cntrPic, pts[3],10, Scalar(0,255,255));  // Yellow
-        if(NORM2(pts[0].x-pts[1].x,pts[0].y-pts[1].y)<NORM2(pts[0].x-pts[3].x,pts[0].y-pts[3].y)) {
+        circle(cntrPic, pts[0], 10, Scalar(255, 0, 0)); //Red
+        circle(cntrPic, pts[1], 10, Scalar(0, 255, 0)); //Green
+        circle(cntrPic, pts[2], 10, Scalar(0, 0, 255)); // Blue
+        circle(cntrPic, pts[3], 10, Scalar(0, 255, 255)); // Yellow
+        circle(cntrPic, maxRect.center, 5, Scalar(255, 0, 0));
+        if(NORM2(pts[0].x - pts[1].x, pts[0].y - pts[1].y) < NORM2(pts[0].x - pts[3].x, pts[0].y - pts[3].y)) {
             // 边01是短边，取边01和边02中点连线作为中轴
             Point2f  L[2];
             L[0].x = (pts[0].x + pts[1].x) / 2;
@@ -191,7 +240,7 @@ int main(int argc, char **argv) {
             line(cntrPic, L[0], L[1], Scalar(0, 0, 255), 2, 8);
 
             if(abs(L[0].y - L[1].y) > EPS) {
-                slope_mean = (L[1].x - L[0].x) / (L[0].y - L[1].y);
+                slope_mean = (L[1].x - L[0].x) / (L[1].y - L[0].y);
                 angle = atan(slope_mean) / CV_PI * 180 + 90;
                 bs_mean = L[0].x - L[0].y * slope_mean;
             }
@@ -219,98 +268,20 @@ int main(int argc, char **argv) {
         int threshold = 20;
         int min_line_len = 50 ;
         int max_line_gap = 0;
-//        HoughLinesP(dstImg, lines, rho, theta, threshold, min_line_len, max_line_gap);
-//        //HoughLinesP(dstImg,lines,rho,theta,threshold);
-//        Mat image_draw = Mat::zeros(color.s ize(), CV_8UC3);
-//        for(size_t i = 0; i < lines.size(); i++) {
-//            Vec4i L = lines[i];
-//            line(image_draw, Point(L[0], L[1]), Point(L[2], L[3]), Scalar(255, 0, 255), 3, LINE_AA);
-//        }
-//        imshow("Hough", image_draw);
-//=============================直线分组=============================
-        // fine * step = 180
-//        const int fine = 36;
-//        int bucket[fine] = {0};
-//        int step = 180 / fine;
-//        double angle;
-//        // Slope == dx/dy
-//        for (int i = 0; i < lines.size(); i++) {
-//            Vec4i L;
-//            double slope;
-//            L = lines[i];
-//            if(abs(L[3] - L[1]) < EPS) continue;
-//            slope = (L[2] - L[0]) * 1.0 / (L[3] - L[1]);
-//            angle = atan(slope) / CV_PI * 180 + 90;
-//            bucket[(int)(angle / step + 0.5)]++;
-//        }
-//        int maxCnt = 0, angIdx = 0;
-//        for(int i = 0; i < fine; i++) {
-//            if(maxCnt < bucket[i]) {
-//                maxCnt = bucket[i];
-//                angIdx = i;
-//            }
-//        }
-//        double sum0 = 0, sum1 = 0, sum2 = 0, sum3 = 0;
-//		for (int i=0;i<lines.size();i++)
-//		{
-//			Vec4i L;
-//			double slope;
-//			L = lines[i];
-//			if(abs(L[3]-L[1])<EPS) continue;
-//			slope = (L[2]-L[0])*1.0/(L[3]-L[1]);
-//			angle = atan(slope)/CV_PI*180+90;
-//			if((int)(angle/step+0.5)!=angIdx) continue;
-//			else{
-//				sum0 += L[0];
-//				sum1 += L[1];
-//				sum2 += L[2];
-//				sum3 += L[3];
-//			}
-//		}
-//		sum0 /= bucket[angIdx];
-//		sum1 /= bucket[angIdx];
-//		sum2 /= bucket[angIdx];
-//		sum3 /= bucket[angIdx];
-//
-//		if(abs(sum3-sum1)<EPS) continue;
-//		slope_mean=(sum2-sum0)*1.0/(sum3-sum1);
-//
-//		bs_mean = sum0-sum1*slope_mean;
-//        slope_mean = 0;
-//        bs_mean = 0;
-//        int maxlen = 0;
-//        for (int i = 0; i < lines.size(); i++) {
-//            Vec4i L;
-//            double slope;
-//            L = lines[i];
-//            if(abs(L[3] - L[1]) < EPS) continue;
-//            slope = (L[2] - L[0]) * 1.0 / (L[3] - L[1]);
-//            angle = atan(slope) / CV_PI * 180 + 90;
-//            if((int)(angle / step + 0.5) != angIdx) continue;
-//            int len = NORM2(L[2] - L[0], L[3] - L[1]);
-//
-//            if(len > maxlen) {
-//                int b = L[0] - L[1] * slope;
-//                bs_mean = b;
-//                slope_mean = slope;
-//                sum0 = L[0];
-//                sum1 = L[1];
-//                sum2 = L[2];
-//                sum3 = L[3];
-//            }
-//        }
-//        line(image_draw, Point(sum0, sum1), Point(sum2, sum3), Scalar(0, 0, 255), 2, LINE_AA);
-//        imshow("Hough", image_draw);
 
 
 
 //=========================PID=====================================
+        //剔除野点
         check(angle, bs_mean);
         int num_line = maxArea == 0 ? 0 : 1;
 
+        meet.y = 1 / tan(angle) * (X0_car - bs_mean);
+        meet.x = X0_car;
+        sgn = maxRect.center.y < meet.y ? 1 : -1;
 
         cout << "angle =" << (int)angle  << "   slope = " << slope_mean << "  b = " << bs_mean << endl;
-        cout << "Num of lines: " << num_line << endl;
+        //cout << "Num of lines: " << num_line << endl;
 
         //double errAng = angle - 90;
         //double errB = bs_mean-330;
@@ -327,23 +298,29 @@ int main(int argc, char **argv) {
         if(1) {
             flag = 1;
         }
-        cout << flag << endl;
+        //cout << flag << endl;
 
         if (flag == 0) {
-            msg.linear.x = PIDlinear(angle, bs_mean);
+            msg.linear.x = PIDlinear(angle, bs_mean, errDist, last_vx);
+            last_vx = msg.linear.x;
             msg.linear.y = 0;
             msg.linear.z = 0;
             msg.angular.x = 0;
             msg.angular.y = 0;
             msg.angular.z = 0;
         } else {
-            msg.linear.x = PIDlinear(angle, bs_mean) ;
+            //msg.linear.x = PIDlinear(angle, bs_mean,errDist, last_vx) ;
+            //last_vx = msg.linear.x;
+            msg.linear.x = 0.1;
             msg.linear.y = 0;
             msg.linear.z = 0;
             msg.angular.x = 0;
             msg.angular.y = 0;
-            msg.angular.z = PIDangle(angle, bs_mean);
+            //msg.angular.z = 0.5;
+            msg.angular.z = PIDangle(angle, bs_mean, errAng, last_omegaz);
+            last_omegaz = msg.angular.z;
         }
+        cout << endl;
 
         /*
                 msg.linear.x=0.1;
@@ -354,13 +331,13 @@ int main(int argc, char **argv) {
         			msg.angular.z = 0;
         */
         pub.publish(msg);
-        //剔除野点
-        last_angle = angle;
-        last_bs = bs_mean;
+
+        //last_angle = angle;
+        //last_bs = bs_mean;
 
         ros::spinOnce();
         loop_rate.sleep();
-        waitKey(5);
+        waitKey(PERIORD);
 
     }
 
