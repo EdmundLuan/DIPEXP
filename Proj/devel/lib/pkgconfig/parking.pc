@@ -1,0 +1,8 @@
+prefix=/home/edmund/run/DIPEXP/Proj/devel
+
+Name: parking
+Description: Description of parking
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/edmund/run/DIPEXP/Proj/devel/lib 
+Requires: 
