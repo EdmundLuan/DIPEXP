@@ -15,10 +15,10 @@ using namespace cv;
 #define NORM2(a,b) ((a)*(a)+(b)*(b))
 #define EPS 0.000001
 #define PERIORD 5
-#define X0_car 330
-#define Y0_car 374
+#define X0_car 350
+#define Y0_car 450
 
-double last_angle = -1;
+double last_angle = -2;
 double last_bs = 0;
 double last_vx = 0;
 double last_omegaz = 0;
@@ -29,9 +29,9 @@ double errAng[3] = {0};
 double errDx[3] = {0};
 RotatedRect maxRect;
 Point2f meet;
-int sgn = 1;
 bool ISOBS = false;
 bool flag = 0; //是否到达直线
+
 void obsCallback(const std_msgs::Bool _isObs) {
     ISOBS = _isObs.data;
 
@@ -62,35 +62,35 @@ void drawRect(Mat& img, RotatedRect &rect, Scalar clr = (255, 255, 255), int thi
         line(img, rectPoints[j], rectPoints[(j + 1) % 4], clr, thickness, lineType);
     }
 }
+
  
 //检查数据
-void check(double & angle, double & bs) {
+bool check(double & angle, double & bs) {
     //剔除野点_角度
-    if (last_angle == -1) {
+    if((int)last_angle == 131 || (int)angle == 131) last_angle = -2;
+    if ((last_angle - (-2)) < EPS) {
         // 初值
         last_angle = angle;
-    } else if (abs(angle - last_angle) > 50 && abs(angle - last_angle) < 170) {
-        cout << "Difference:  " << abs(angle-last_angle) << endl;
+        last_bs = bs;
+    } else if (abs(angle - last_angle) > 20 && abs(angle - last_angle) < 170) {
+        cout << "野点 detected!\nDifference:  " << abs(angle-last_angle) << endl;
         // 野点剔除
         angle = last_angle;
-        
+        bs = last_bs;
+        return false;
     }
     // 更新
     last_angle = angle;
-
-    //剔除野点_截距 
-//    if (last_bs == 0) {
-//        last_bs = bs;
-//    } else if (abs(bs - last_bs) > 1000 && last_bs != 0 ) {
-//        bs = last_bs;
-//    }
+    last_bs = bs;
+    return true;
 }
+
 double PIDlinear(double angle, double bs, double errDist[], double&  last_vx) {
     const double Kp = 0.0001f;
     const double Ti = 1000;
     const double Td = 0;
     const double T = PERIORD;
-    const double MaxVx = 0.1;
+    const double MaxVx = 0.2;
 
     // double q0 = Kp * (1 + T / Ti + Td / T);
     // double q1 = -Kp * (1 + 2 * Td / T);
@@ -98,75 +98,45 @@ double PIDlinear(double angle, double bs, double errDist[], double&  last_vx) {
      double vx;
 
     // //计算距离, 控制目标是0
-    // errDist[0] = Y0_car - 1.0 / tan((angle-90)/180*CV_PI) * (330 - bs);
-
-    // vx = last_vx + q0 * errDist[0] + q1 * errDist[1] + q2 * errDist[2];
-
-    // errDist[2] = errDist[1];
-    // errDist[1] = errDist[0];
-
-    // if(vx > MaxVx)
-    //     vx = MaxVx;
-    // else if(vx < -MaxVx)
-    //     vx = -MaxVx;
-
-    // last_vx = vx;
 
     double dist = Y0_car - meet.y;
-    vx = dist > 0 ? MaxVx : - MaxVx;
+    
+    if(abs(dist - errDist[0] < 200))
+        vx = dist > 0 ? MaxVx : - MaxVx;
+    else
+        vx = MaxVx;
 
     cout << "dist :  " << dist << endl;
     cout << "vx :  " << vx << endl;
+    errDist[0] = dist;
+    errDist[1] = errDist[0];
     return vx;
 }
 
 double PIDangle(double angle, double bs, double errAng[], double & last_omegaz) {
-    /*const double Kp = -0.0006f;
-    const double Ti = 1000;
-    const double Td = 0;
-    const double K_DA = 10; // Coefficient of influence of Dist
-    const double T = PERIORD;
-    const double MaxOmegaz = 0.5;
-    const double ThresholdInv = 10;
-    double q0 = Kp * (1 + T / Ti + Td / T);
-    double q1 = -Kp * (1 + 2 * Td / T);
-    double q2 = Kp * Td / T;
-    double dist = 0, ance = 0;
-    int inv = 1;
-    double omegaz;
-    // 角度控制目标是90
-    errAng[0] = 90 - angle;
-
-    dist = Y0_car - meet.y;
-    ance = sgn * sqrt(NORM2(meet.x - maxRect.center.x, meet.y - maxRect.center.y)  );
-    inv = ance >= dist * ThresholdInv ? 1 : -1;
-
-    omegaz = last_omegaz + q0 * errAng[0] + q1 * errAng[1] + q2 * errAng[2];
-    omegaz *= inv ;/// (abs(dist)+1);
-    */
-    
-    const double Kp1=-0.001;
-    //const double Kp2=0;
+    const double Kp1=-0.007;
+    const double Kd1=0.0007;
     const double Kp2=0.002;
-    const double Kd1=0.0005;
-    const double Ki2=0.001;
-    const double ThresholdIsInt = 100;
-
-    const double MaxOmegaz = 0.4;
+    const double Ki2=0.00001;
+    const double ThresholdIsInt = 40;
+    const double MaxOmegaz = 0.3;
+    
     double omegaz = 0;
     double slope = tan((angle-90)/180*CV_PI);  
-    
     
     errAng[0] = 90 - angle;
     cout<<"error angle :  "<<errAng[0]<<endl;
     double dx =(X0_car-slope*Y0_car-bs)/(sqrt(1+slope*slope));
     cout<<"dx :  "<<dx<<endl;
     errDx[0] = 0 - dx;
-    omegaz = Kp1 * errAng[0] + Kd1*(errAng[1]-errAng[0]) - Kp2*(errDx[0]) + (dx > ThresholdIsInt ? 1 : 0) * Ki2 * (errDx[0]+errDx[1]+errDx[2]);
+    omegaz = Kp1 * errAng[0] + Kd1*(errAng[1]-errAng[0]) - Kp2*(errDx[0]) - (abs(dx) > ThresholdIsInt ? 1 : 0) * Ki2 * (errDx[0]+errDx[1]+errDx[2]);
     
     
     errDx[2] += errDx[1];
     errDx[1] = errDx[0];
+    cout << "Integral errDx: " << errDx[2] << endl;
+    if(abs(dx) > ThresholdIsInt) 
+        cout << " ! Intergrating ! "<< endl;
     errAng[2] += errAng[1];
     errAng[1] = errAng[0];
 
@@ -176,10 +146,7 @@ double PIDangle(double angle, double bs, double errAng[], double & last_omegaz) 
         omegaz = -MaxOmegaz;
 
     last_omegaz = omegaz;
-/*
-    cout << "Error Angle:  " << errAng[0] << endl;
-    cout << "Dist / Ance:  " << dist/ance << endl;
-    */
+
     cout << "Omegaz :  " << omegaz << "    Last Omegaz:  " << last_omegaz << endl;
     return omegaz;
 }
@@ -192,21 +159,18 @@ int main(int argc, char **argv) {
     ros::Publisher pub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 5);
     ros::Subscriber sub_obs = nh.subscribe("/isObs", 2, obsCallback);
     VideoCapture capture;
-    capture.open(0);
+    capture.open(1);
     if (!capture.isOpened()) {
         printf("摄像头没有正常打开，重新插拔工控机上的摄像头\n");
         return 0;
     }
     waitKey(2000);
-    //Mat a;
-    //int frameWidth = capture.get(CV_CAP_PROP_FRAME_WIDTH);
-    //int frameHeight = capture.get(CV_CAP_PROP_FRAME_HEIGHT);
 
     Mat frame, color, edges, img_trans, dstImg;
     while(ros::ok()) {
 //=========================图像maxLevel=IN处理========================================
         capture >> frame;
-       // frame = frame(Rect(0, 0, frame.size().width / 2, frame.size().height));
+        frame = frame(Rect(0, 0, frame.size().width / 2, frame.size().height));
         frame.copyTo(color);
         imshow("Raw", frame);
 
@@ -215,7 +179,7 @@ int main(int argc, char **argv) {
         cvtColor(color, color, COLOR_BGR2HSV);
 
         // 颜色分割
-        inRange(color, Scalar(35, 43, 46), Scalar(79, 255, 255), color);
+        inRange(color, Scalar(35, 43, 46), Scalar(90, 255, 255), color);
         imshow("Color Segmentation", color);
 //===============================透视变换、边缘二值图=========================================
         img_trans = color.clone();
@@ -229,7 +193,7 @@ int main(int argc, char **argv) {
         vector<vector<Point> > contours;
         vector<Vec4i> hierarchy;
         int idxMax=0;
-        Mat cntrPic = Mat::zeros(dstImg.rows, dstImg.cols, CV_8UC3);
+        Mat cntrPic = Mat::zeros(Y0_car+10, dstImg.cols, CV_8UC3);
         findContours(dstImg, contours, hierarchy, RETR_CCOMP, CHAIN_APPROX_SIMPLE);
         // Bounding rectangle and Draw
         vector<RotatedRect> rects(contours.size());
@@ -245,14 +209,28 @@ int main(int argc, char **argv) {
         }
         if(maxArea == 0) {
             cout << "Object not Found!!\n" << endl;
+            if(errAng[0] < 10){  // H is right under our wheels. 
+                for(int i=0;i<70;i++){
+                    msg.linear.x=0.3;
+                    msg.linear.y = 0;
+                    msg.linear.z = 0;
+                    msg.angular.x = 0;
+                    msg.angular.y = 0;
+                    msg.angular.z = 0;
+                    pub.publish(msg);
+                    waitKey(5);
+                }
+                cout << "\nDone!"<<endl;
+                return 0;
+            }
             continue;
         }
         drawContours(cntrPic, contours, idxMax, Scalar(0,255,0),1);
         drawRect(cntrPic, maxRect, Scalar(255, 255, 255), 2);
-
+        line(cntrPic, Point(0, dstImg.rows-1), Point(dstImg.cols-1,dstImg.rows-1),Scalar(255,255,255),1,CV_AA);
 
         // 找出面积最大的矩形的2条长边，二者均值作为轴线
-        double angle;
+        double angle=-1;
         slope_mean = 1.0/EPS;
         bs_mean = 1.0/EPS;
         Point2f pts[4];
@@ -302,30 +280,15 @@ int main(int argc, char **argv) {
         meet.y = 1.0 / tan((angle-90)/180*CV_PI) * (X0_car - bs_mean);
         meet.x = X0_car;
         circle(cntrPic, meet, 10, Scalar(255,0,255));
-        line(cntrPic, Point(X0_car, 375), Point(X0_car, 1), Scalar(255,255,255), 1);
-        sgn = maxRect.center.y < meet.y ? 1 : -1;
+        line(cntrPic, Point(X0_car, Y0_car-5), Point(X0_car, 1), Scalar(255,255,255), 1);
         cout << "meet(" << meet.x <<','<<meet.y<<")"<<endl;
         imshow("Objects of Interest", cntrPic);
 
-        cout << "angle =" << (int)angle  << "   slope = " << slope_mean << "  b = " << bs_mean << endl;
-        //cout << "Num of lines: " << num_line << endl;
-
-        //double errAng = angle - 90;
-        //double errB = bs_mean-330;
-        if(num_line == 0) { //don't stop
-            msg.linear.x = 0;
-            msg.linear.y = 0;
-            msg.linear.z = 0;
-            msg.angular.x = 0;
-            msg.angular.y = 0;
-            msg.angular.z = 0;
-            cout << "couldn't find H !!" << endl;
-        }
+        cout << "angle =" << angle  << "   slope = " << slope_mean << "  b = " << bs_mean << endl;
 
         if(1) {
-            flag = 0;
+            flag = 1;
         }
-        //cout << flag << endl;
 
         if (flag == 0) {
             msg.linear.x = 0.1;
@@ -343,24 +306,12 @@ int main(int argc, char **argv) {
             msg.linear.z = 0;
             msg.angular.x = 0;
             msg.angular.y = 0;
-            //msg.angular.z = 0.5;
             msg.angular.z = PIDangle(angle, bs_mean, errAng, last_omegaz);
             last_omegaz = msg.angular.z;
         }
         cout << endl;
 
-        /*
-                msg.linear.x=0.1;
-        			msg.linear.y = 0;
-        			msg.linear.z = 0;
-        			msg.angular.x = 0;
-        			msg.angular.y = 0;
-        			msg.angular.z = 0;
-        */
         pub.publish(msg);
-
-        //last_angle = angle;
-        //last_bs = bs_mean;
 
         ros::spinOnce();
         loop_rate.sleep();
@@ -370,3 +321,4 @@ int main(int argc, char **argv) {
 
     return 0;
 }
+
